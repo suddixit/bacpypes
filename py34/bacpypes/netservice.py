@@ -759,6 +759,9 @@ class NetworkServiceElement(ApplicationServiceElement):
             # pass this along to the cache
             sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
 
+            # send an announcement
+            self.i_am_router_to_network(adapter=adapter, network=adapter.adapterNet)
+
     def indication(self, adapter, npdu):
         if _debug: NetworkServiceElement._debug("indication %r %r", adapter, npdu)
 

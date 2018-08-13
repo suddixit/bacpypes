@@ -760,6 +760,9 @@ class NetworkServiceElement(ApplicationServiceElement):
             # pass this along to the cache
             sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
 
+            # send an announcement
+            self.i_am_router_to_network(adapter=adapter, network=netlist)
+
     def indication(self, adapter, npdu):
         if _debug: NetworkServiceElement._debug("indication %r %r", adapter, npdu)
 
@@ -840,10 +843,14 @@ class NetworkServiceElement(ApplicationServiceElement):
                     netlist.append(xadapter.adapterNet)
                     ### add the other reachable networks
 
-            if network is not None:
+            if network is None:
+                pass
+            elif isinstance(network, int):
                 if network not in netlist:
                     continue
                 netlist = [network]
+            elif isinstance(network, list):
+                netlist = list(set(netlist).intersection(set(network)))
 
             # build a response
             iamrtn = IAmRouterToNetwork(netlist)
