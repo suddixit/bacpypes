@@ -27,6 +27,16 @@ _debug = 0
 _log = ModuleLogger(globals())
 
 
+class _NetworkServiceElement(NetworkServiceElement):
+
+    """
+    This class turns off the deferred startup function call that broadcasts
+    I-Am-Router-To-Network and Network-Number-Is messages.
+    """
+
+    _startup_disabled = True
+
+
 @bacpypes_debugging
 class NPDUCodec(Client, Server):
 
@@ -132,7 +142,7 @@ class RouterNode:
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
     def add_network(self, address, vlan, net):
@@ -214,7 +224,7 @@ class ApplicationLayerStateMachine(ApplicationServiceElement, ClientStateMachine
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
         # bind the top layers
@@ -279,7 +289,7 @@ class ApplicationNode(Application, WhoIsIAmServices, ReadWritePropertyServices):
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
         # bind the top layers

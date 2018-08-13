@@ -28,6 +28,17 @@ from bacpypes.bvllservice import BIPSimple, BIPForeign, BIPBBMD, AnnexJCodec
 _debug = 0
 _log = ModuleLogger(globals())
 
+
+class _NetworkServiceElement(NetworkServiceElement):
+
+    """
+    This class turns off the deferred startup function call that broadcasts
+    I-Am-Router-To-Network and Network-Number-Is messages.
+    """
+
+    _startup_disabled = True
+
+
 #
 #   FauxMultiplexer
 #
@@ -371,7 +382,7 @@ class BIPSimpleApplicationLayerStateMachine(ApplicationServiceElement, ClientSta
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
         # bind the top layers
@@ -439,7 +450,7 @@ class BIPBBMDApplication(Application, WhoIsIAmServices, ReadWritePropertyService
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
         # bind the top layers
