@@ -159,6 +159,26 @@ class RouterInfoCache:
             if _debug: RouterInfoCache._debug("    - no longer care about this router")
             del self.routers[key]
 
+    def update_source_network(self, old_snet, new_snet):
+        if _debug: RouterInfoCache._debug("update_source_network %r %r", old_snet, new_snet)
+
+        # start with a new map
+        new_router_map = {}
+        if _debug: RouterInfoCache._debug("    - old router map: %r", self.routers)
+
+        # update all the router keys and router info records
+        for router_key, router_info in self.routers.items():
+            if router_info.snet == old_snet:
+                router_info.snet = new_snet
+            if router_key[0] == old_snet:
+                router_key = (new_snet, router_key[1])
+
+            new_router_map[router_key] = router_info
+        if _debug: RouterInfoCache._debug("    - new_router_map: %r", new_router_map)
+
+        # save the new map
+        self.routers = new_router_map
+
 #
 #   NetworkAdapter
 #
@@ -245,6 +265,10 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
         if net in self.adapters:
             raise RuntimeError("already bound")
 
+        # address is required if net is not None
+        if (net is not None) and (address is None):
+            raise RuntimeError("address is required when network is configured")
+
         # create an adapter object, add it to our map
         adapter = NetworkAdapter(self, net, address)
         self.adapters[net] = adapter
@@ -260,9 +284,9 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
 
     #-----
 
-    def add_router_references(self, snet, address, dnets):
-        """Add/update references to routers."""
-        if _debug: NetworkServiceAccessPoint._debug("add_router_references %r %r %r", snet, address, dnets)
+    def update_router_references(self, snet, address, dnets):
+        """Update references to routers."""
+        if _debug: NetworkServiceAccessPoint._debug("update_router_references %r %r %r", snet, address, dnets)
 
         # see if we have an adapter for the snet
         if snet not in self.adapters:
@@ -944,7 +968,7 @@ class NetworkServiceElement(ApplicationServiceElement):
         if _debug: NetworkServiceElement._debug("    - sap: %r", sap)
 
         # pass along to the service access point
-        sap.add_router_references(adapter.adapterNet, npdu.pduSource, npdu.iartnNetworkList)
+        sap.update_router_references(adapter.adapterNet, npdu.pduSource, npdu.iartnNetworkList)
 
         # skip if this is not a router
         if len(sap.adapters) == 1:
@@ -1142,6 +1166,9 @@ class NetworkServiceElement(ApplicationServiceElement):
         if adapter.adapterNet is None:
             if _debug: NetworkServiceElement._debug("   - local network not known: %r", list(sap.adapters.keys()))
 
+            # update the routing information
+            sap.router_info_cache.update_source_network(None, npdu.nniNet)
+
             # delete the reference from an unknown network
             del sap.adapters[None]
 
@@ -1152,7 +1179,6 @@ class NetworkServiceElement(ApplicationServiceElement):
             sap.adapters[adapter.adapterNet] = adapter
 
             if _debug: NetworkServiceElement._debug("   - local network learned")
-            ###TODO: s/None/net/g in routing tables
             return
 
         # check if this matches what we have
@@ -1167,6 +1193,9 @@ class NetworkServiceElement(ApplicationServiceElement):
 
         if _debug: NetworkServiceElement._debug("   - learning something new")
 
+        # update the routing information
+        sap.router_info_cache.update_source_network(adapter.adapterNet, npdu.nniNet)
+
         # delete the reference from the old (learned) network
         del sap.adapters[adapter.adapterNet]
 
@@ -1175,6 +1204,4 @@ class NetworkServiceElement(ApplicationServiceElement):
 
         # we now know what network this is
         sap.adapters[adapter.adapterNet] = adapter
-
-        ###TODO: s/old/new/g in routing tables
 

@@ -9,6 +9,7 @@ from copy import deepcopy as _deepcopy
 from .debugging import ModuleLogger, DebugContents, bacpypes_debugging
 from .errors import ConfigurationError
 
+from .core import deferred
 from .comm import Client, Server, bind, \
     ServiceAccessPoint, ApplicationServiceElement
 from .task import FunctionTask
@@ -157,6 +158,25 @@ class RouterInfoCache:
             if _debug: RouterInfoCache._debug("    - no longer care about this router")
             del self.routers[key]
 
+    def update_source_network(self, old_snet, new_snet):
+        if _debug: RouterInfoCache._debug("update_source_network %r %r", old_snet, new_snet)
+
+        # start with a new map
+        new_router_map = {}
+
+        # update all the router keys and router info records
+        for router_key, router_info in self.routers.items():
+            if router_info.snet == old_snet:
+                router_info.snet = new_snet
+            if router_key[0] == old_snet:
+                router_key = (new_snet, router_key[1])
+
+            new_router_map[router_key] = router_info
+        if _debug: RouterInfoCache._debug("    - new_router_map: %r", new_router_map)
+
+        # save the new map
+        self.routers = new_router_map
+
 bacpypes_debugging(RouterInfoCache)
 
 #
@@ -165,13 +185,19 @@ bacpypes_debugging(RouterInfoCache)
 
 class NetworkAdapter(Client, DebugContents):
 
-    _debug_contents = ('adapterSAP-', 'adapterNet', 'adapterNetConfigured')
+    _debug_contents = (
+        'adapterSAP-',
+        'adapterNet',
+        'adapterAddr',
+        'adapterNetConfigured',
+        )
 
-    def __init__(self, sap, net, cid=None):
-        if _debug: NetworkAdapter._debug("__init__ %s %r cid=%r", sap, net, cid)
+    def __init__(self, sap, net, addr, cid=None):
+        if _debug: NetworkAdapter._debug("__init__ %s %r %r cid=%r", sap, net, addr, cid)
         Client.__init__(self, cid)
         self.adapterSAP = sap
         self.adapterNet = net
+        self.adapterAddr = addr
 
         # record if this was 0=learned, 1=configured, None=unknown
         if net is None:
@@ -239,8 +265,12 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
         if net in self.adapters:
             raise RuntimeError("already bound")
 
+        # address is required if net is not None
+        if (net is not None) and (address is None):
+            raise RuntimeError("address is required when network is configured")
+
         # create an adapter object, add it to our map
-        adapter = NetworkAdapter(self, net)
+        adapter = NetworkAdapter(self, net, address)
         self.adapters[net] = adapter
         if _debug: NetworkServiceAccessPoint._debug("    - adapters[%r]: %r", net, adapter)
 
@@ -254,9 +284,9 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
 
     #-----
 
-    def add_router_references(self, snet, address, dnets):
-        """Add/update references to routers."""
-        if _debug: NetworkServiceAccessPoint._debug("add_router_references %r %r %r", snet, address, dnets)
+    def update_router_references(self, snet, address, dnets):
+        """Update references to routers."""
+        if _debug: NetworkServiceAccessPoint._debug("update_router_references %r %r %r", snet, address, dnets)
 
         # see if we have an adapter for the snet
         if snet not in self.adapters:
@@ -680,12 +710,56 @@ bacpypes_debugging(NetworkServiceAccessPoint)
 
 class NetworkServiceElement(ApplicationServiceElement):
 
+    _startup_disabled = False
+
     def __init__(self, eid=None):
         if _debug: NetworkServiceElement._debug("__init__ eid=%r", eid)
         ApplicationServiceElement.__init__(self, eid)
 
         # network number is timeout
         self.network_number_is_task = None
+
+        # if starting up is enabled defer our startup function
+        if not self._startup_disabled:
+            deferred(self.startup)
+
+    def startup(self):
+        if _debug: NetworkServiceElement._debug("startup")
+
+        # reference the service access point
+        sap = self.elementService
+        if _debug: NetworkServiceElement._debug("    - sap: %r", sap)
+
+        # loop through all of the adapters
+        for adapter in sap.adapters.values():
+            if _debug: NetworkServiceElement._debug("    - adapter: %r", adapter)
+
+            if (adapter.adapterNet is None):
+                if _debug: NetworkServiceElement._debug("    - skipping, unknown net")
+                continue
+            elif (adapter.adapterAddr is None):
+                if _debug: NetworkServiceElement._debug("    - skipping, unknown addr")
+                continue
+
+            # build a list of reachable networks
+            netlist = []
+
+            # loop through the adapters
+            for xadapter in sap.adapters.values():
+                if (xadapter is not adapter):
+                    if (xadapter.adapterNet is None) or (xadapter.adapterAddr is None):
+                        continue
+
+                    netlist.append(xadapter.adapterNet)
+                    ### add the other reachable networks
+
+            # skip for an empty list, perhaps they are not yet learned
+            if not netlist:
+                if _debug: NetworkServiceElement._debug("    - skipping, no netlist")
+                continue
+
+            # pass this along to the cache
+            sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
 
     def indication(self, adapter, npdu):
         if _debug: NetworkServiceElement._debug("indication %r %r", adapter, npdu)
@@ -895,7 +969,7 @@ class NetworkServiceElement(ApplicationServiceElement):
         if _debug: NetworkServiceElement._debug("    - sap: %r", sap)
 
         # pass along to the service access point
-        sap.add_router_references(adapter.adapterNet, npdu.pduSource, npdu.iartnNetworkList)
+        sap.update_router_references(adapter.adapterNet, npdu.pduSource, npdu.iartnNetworkList)
 
         # skip if this is not a router
         if len(sap.adapters) == 1:
@@ -1093,6 +1167,9 @@ class NetworkServiceElement(ApplicationServiceElement):
         if adapter.adapterNet is None:
             if _debug: NetworkServiceElement._debug("   - local network not known: %r", list(sap.adapters.keys()))
 
+            # update the routing information
+            sap.router_info_cache.update_source_network(None, npdu.nniNet)
+
             # delete the reference from an unknown network
             del sap.adapters[None]
 
@@ -1103,7 +1180,6 @@ class NetworkServiceElement(ApplicationServiceElement):
             sap.adapters[adapter.adapterNet] = adapter
 
             if _debug: NetworkServiceElement._debug("   - local network learned")
-            ###TODO: s/None/net/g in routing tables
             return
 
         # check if this matches what we have
@@ -1118,6 +1194,9 @@ class NetworkServiceElement(ApplicationServiceElement):
 
         if _debug: NetworkServiceElement._debug("   - learning something new")
 
+        # update the routing information
+        sap.router_info_cache.update_source_network(adapter.adapterNet, npdu.nniNet)
+
         # delete the reference from the old (learned) network
         del sap.adapters[adapter.adapterNet]
 
@@ -1126,8 +1205,6 @@ class NetworkServiceElement(ApplicationServiceElement):
 
         # we now know what network this is
         sap.adapters[adapter.adapterNet] = adapter
-
-        ###TODO: s/old/new/g in routing tables
 
 bacpypes_debugging(NetworkServiceElement)
 

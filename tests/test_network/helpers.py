@@ -156,7 +156,7 @@ class RouterNode:
         if _debug: RouterNode._debug("    - node: %r", node)
 
         # bind the BIP stack to the local network
-        self.nsap.bind(node, net)
+        self.nsap.bind(node, net, address)
 
 #
 #   RouterStateMachine
