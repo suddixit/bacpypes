@@ -332,6 +332,8 @@ class TestDeviceObject(LocalDeviceObject):
 @bacpypes_debugging
 class BIPSimpleApplicationLayerStateMachine(ApplicationServiceElement, ClientStateMachine):
 
+    _startup_disabled = True
+
     def __init__(self, address, vlan):
         if _debug: BIPSimpleApplicationLayerStateMachine._debug("__init__ %r %r", address, vlan)
 
@@ -401,6 +403,8 @@ class BIPSimpleApplicationLayerStateMachine(ApplicationServiceElement, ClientSta
 #
 
 class BIPBBMDApplication(Application, WhoIsIAmServices, ReadWritePropertyServices):
+
+    _startup_disabled = True
 
     def __init__(self, address, vlan):
         if _debug: BIPBBMDApplication._debug("__init__ %r %r", address, vlan)

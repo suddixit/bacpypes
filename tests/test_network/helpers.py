@@ -241,6 +241,8 @@ class ApplicationLayerStateMachine(ApplicationServiceElement, ClientStateMachine
 
 class ApplicationNode(Application, WhoIsIAmServices, ReadWritePropertyServices):
 
+    _startup_disabled = True
+
     def __init__(self, address, vlan):
         if _debug: ApplicationNode._debug("__init__ %r %r", address, vlan)
 

@@ -9,6 +9,7 @@ from copy import deepcopy as _deepcopy
 from .debugging import ModuleLogger, DebugContents, bacpypes_debugging
 from .errors import ConfigurationError
 
+from .core import deferred
 from .comm import Client, Server, bind, \
     ServiceAccessPoint, ApplicationServiceElement
 from .task import FunctionTask
@@ -165,13 +166,19 @@ class RouterInfoCache:
 @bacpypes_debugging
 class NetworkAdapter(Client, DebugContents):
 
-    _debug_contents = ('adapterSAP-', 'adapterNet', 'adapterNetConfigured')
+    _debug_contents = (
+        'adapterSAP-',
+        'adapterNet',
+        'adapterAddr',
+        'adapterNetConfigured',
+        )
 
-    def __init__(self, sap, net, cid=None):
-        if _debug: NetworkAdapter._debug("__init__ %s %r cid=%r", sap, net, cid)
+    def __init__(self, sap, net, addr, cid=None):
+        if _debug: NetworkAdapter._debug("__init__ %s %r %r cid=%r", sap, net, addr, cid)
         Client.__init__(self, cid)
         self.adapterSAP = sap
         self.adapterNet = net
+        self.adapterAddr = addr
 
         # record if this was 0=learned, 1=configured, None=unknown
         if net is None:
@@ -239,7 +246,7 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
             raise RuntimeError("already bound")
 
         # create an adapter object, add it to our map
-        adapter = NetworkAdapter(self, net)
+        adapter = NetworkAdapter(self, net, address)
         self.adapters[net] = adapter
         if _debug: NetworkServiceAccessPoint._debug("    - adapters[%r]: %r", net, adapter)
 
@@ -678,12 +685,56 @@ class NetworkServiceAccessPoint(ServiceAccessPoint, Server, DebugContents):
 @bacpypes_debugging
 class NetworkServiceElement(ApplicationServiceElement):
 
+    _startup_disabled = False
+
     def __init__(self, eid=None):
         if _debug: NetworkServiceElement._debug("__init__ eid=%r", eid)
         ApplicationServiceElement.__init__(self, eid)
 
         # network number is timeout
         self.network_number_is_task = None
+
+        # if starting up is enabled defer our startup function
+        if not self._startup_disabled:
+            deferred(self.startup)
+
+    def startup(self):
+        if _debug: NetworkServiceElement._debug("startup")
+
+        # reference the service access point
+        sap = self.elementService
+        if _debug: NetworkServiceElement._debug("    - sap: %r", sap)
+
+        # loop through all of the adapters
+        for adapter in sap.adapters.values():
+            if _debug: NetworkServiceElement._debug("    - adapter: %r", adapter)
+
+            if (adapter.adapterNet is None):
+                if _debug: NetworkServiceElement._debug("    - skipping, unknown net")
+                continue
+            elif (adapter.adapterAddr is None):
+                if _debug: NetworkServiceElement._debug("    - skipping, unknown addr")
+                continue
+
+            # build a list of reachable networks
+            netlist = []
+
+            # loop through the adapters
+            for xadapter in sap.adapters.values():
+                if (xadapter is not adapter):
+                    if (xadapter.adapterNet is None) or (xadapter.adapterAddr is None):
+                        continue
+
+                    netlist.append(xadapter.adapterNet)
+                    ### add the other reachable networks
+
+            # skip for an empty list, perhaps they are not yet learned
+            if not netlist:
+                if _debug: NetworkServiceElement._debug("    - skipping, no netlist")
+                continue
+
+            # pass this along to the cache
+            sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
 
     def indication(self, adapter, npdu):
         if _debug: NetworkServiceElement._debug("indication %r %r", adapter, npdu)
