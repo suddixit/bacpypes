@@ -132,7 +132,7 @@ class TestSimple(unittest.TestCase):
 class TestNetworkStartup(unittest.TestCase):
 
     def test_01(self):
-        """Test broadcast for any router."""
+        """Broadcast I-Am-Router-To-Network messages."""
         if _debug: TestNetworkStartup._debug("test_01")
 
         # create a network
@@ -142,25 +142,24 @@ class TestNetworkStartup(unittest.TestCase):
         tnet.td1.start_state.doc("1-1-0") \
             .timeout(1).doc("1-1-1") \
             .call(tnet.iut.nse.startup).doc("1-1-2") \
-            .timeout(1).doc("1-1-3") \
+            .receive(IAmRouterToNetwork,
+                iartnNetworkList=[2, 3],
+                ).doc("1-1-3") \
             .success()
-#            .receive(IAmRouterToNetwork,
-#                iartnNetworkList=[2, 3],
-#                ).doc("1-1-3") \
 
         # test device 2 receives I-Am-Router-To-Network
         tnet.td2.start_state.doc("1-2-0") \
+            .receive(IAmRouterToNetwork,
+                iartnNetworkList=[1, 3],
+                ).doc("1-2-1") \
             .success()
-#            .receive(IAmRouterToNetwork,
-#                iartnNetworkList=[1, 3],
-#                ).doc("1-2-1") \
 
         # test device 3 receives I-Am-Router-To-Network
         tnet.td3.start_state.doc("1-3-0") \
+            .receive(IAmRouterToNetwork,
+                iartnNetworkList=[1, 2],
+                ).doc("1-3-1") \
             .success()
-#            .receive(IAmRouterToNetwork,
-#                iartnNetworkList=[1, 2],
-#                ).doc("1-3-1") \
 
         # run the group
         tnet.run()

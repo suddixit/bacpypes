@@ -79,46 +79,50 @@ class RouterInfoCache:
         # look up the router reference, make a new record if necessary
         key = (snet, address)
         if key not in self.routers:
-            if _debug: RouterInfoCache._debug("   - new router")
+            if _debug: RouterInfoCache._debug("    - new router")
             router_info = self.routers[key] = RouterInfo(snet, address, list())
         else:
             router_info = self.routers[key]
 
         # add (or move) the destination networks
         for dnet in dnets:
+            if _debug: RouterInfoCache._debug("    - dnet: %r", dnet)
+
+            # check for existing router info
             if dnet in self.networks:
                 other_router = self.networks[dnet]
                 if other_router is router_info:
-                    if _debug: RouterInfoCache._debug("   - existing router, match")
+                    if _debug: RouterInfoCache._debug("    - same router")
                     continue
-                elif dnet not in other_router.dnets:
-                    if _debug: RouterInfoCache._debug("   - where did it go?")
-                else:
-                    other_router.dnets.remove(dnet)
-                    if not other_router.dnets:
-                        if _debug: RouterInfoCache._debug("    - no longer care about this router")
-                        del self.routers[(snet, other_router.address)]
+
+                if _debug: RouterInfoCache._debug("    - moving from: %r", other_router)
+
+                other_router.dnets.remove(dnet)
+                if not other_router.dnets:
+                    if _debug: RouterInfoCache._debug("    - no other dnets")
+                    del self.routers[(other_router.snet, other_router.address)]
 
             # add a reference to the router
             self.networks[dnet] = router_info
-            if _debug: RouterInfoCache._debug("   - reference added")
+            if _debug: RouterInfoCache._debug("    - reference added")
 
             # maybe update the list of networks for this router
             if dnet not in router_info.dnets:
                 router_info.dnets.append(dnet)
-                if _debug: RouterInfoCache._debug("   - dnet added, now: %r", router_info.dnets)
+
+        if _debug: RouterInfoCache._debug("    - updated router info: %r", router_info)
 
     def update_router_status(self, snet, address, status):
         if _debug: RouterInfoCache._debug("update_router_status %r %r %r", snet, address, status)
 
         key = (snet, address)
         if key not in self.routers:
-            if _debug: RouterInfoCache._debug("   - not a router we care about")
+            if _debug: RouterInfoCache._debug("    - not a router we know about")
             return
 
         router_info = self.routers[key]
         router_info.status = status
-        if _debug: RouterInfoCache._debug("   - status updated")
+        if _debug: RouterInfoCache._debug("    - status updated")
 
     def delete_router_info(self, snet, address=None, dnets=None):
         if _debug: RouterInfoCache._debug("delete_router_info %r %r %r", dnets)
@@ -127,19 +131,19 @@ class RouterInfoCache:
         if address is None:
             for rnet, raddress in self.routers.keys():
                 if snet == rnet:
-                    if _debug: RouterInfoCache._debug("   - going down")
+                    if _debug: RouterInfoCache._debug("    - going down")
                     self.delete_router_info(snet, raddress)
-            if _debug: RouterInfoCache._debug("   - back topside")
+            if _debug: RouterInfoCache._debug("    - back topside")
             return
 
         # look up the router reference
         key = (snet, address)
         if key not in self.routers:
-            if _debug: RouterInfoCache._debug("   - unknown router")
+            if _debug: RouterInfoCache._debug("    - unknown router")
             return
 
         router_info = self.routers[key]
-        if _debug: RouterInfoCache._debug("   - router_info: %r", router_info)
+        if _debug: RouterInfoCache._debug("    - router_info: %r", router_info)
 
         # if dnets is None, remove all the networks for the router
         if dnets is None:
@@ -149,10 +153,10 @@ class RouterInfoCache:
         for dnet in dnets:
             if dnet in self.networks:
                 del self.networks[dnet]
-                if _debug: RouterInfoCache._debug("   - removed from networks: %r", dnet)
+                if _debug: RouterInfoCache._debug("    - removed from networks: %r", dnet)
             if dnet in router_info.dnets:
                 router_info.dnets.remove(dnet)
-                if _debug: RouterInfoCache._debug("   - removed from router_info: %r", dnet)
+                if _debug: RouterInfoCache._debug("    - removed from router_info: %r", dnet)
 
         # see if we still care
         if not router_info.dnets:
@@ -748,17 +752,15 @@ class NetworkServiceElement(ApplicationServiceElement):
                 if (xadapter is not adapter):
                     if (xadapter.adapterNet is None) or (xadapter.adapterAddr is None):
                         continue
-
                     netlist.append(xadapter.adapterNet)
-                    ### add the other reachable networks
 
             # skip for an empty list, perhaps they are not yet learned
             if not netlist:
                 if _debug: NetworkServiceElement._debug("    - skipping, no netlist")
                 continue
 
-            # pass this along to the cache
-            sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
+            # pass this along to the cache -- on hold #213
+            # sap.router_info_cache.update_router_info(adapter.adapterNet, adapter.adapterAddr, netlist)
 
             # send an announcement
             self.i_am_router_to_network(adapter=adapter, network=netlist)
@@ -850,7 +852,7 @@ class NetworkServiceElement(ApplicationServiceElement):
                     continue
                 netlist = [network]
             elif isinstance(network, list):
-                netlist = list(set(netlist).intersection(set(network)))
+                netlist = [net for net in netlist if net in network]
 
             # build a response
             iamrtn = IAmRouterToNetwork(netlist)
