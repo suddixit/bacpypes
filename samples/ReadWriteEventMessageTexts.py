@@ -11,7 +11,7 @@ from bacpypes.debugging import bacpypes_debugging, ModuleLogger
 from bacpypes.consolelogging import ConfigArgumentParser
 from bacpypes.consolecmd import ConsoleCmd
 
-from bacpypes.core import run, enable_sleeping
+from bacpypes.core import run, deferred, enable_sleeping
 from bacpypes.iocb import IOCB
 
 from bacpypes.pdu import Address
@@ -71,7 +71,7 @@ class ReadWritePropertyConsoleCmd(ConsoleCmd):
             if _debug: ReadWritePropertyConsoleCmd._debug("    - iocb: %r", iocb)
 
             # give it to the application
-            this_application.request_io(iocb)
+            deferred(this_application.request_io, iocb)
 
             # wait for it to complete
             iocb.wait()
@@ -193,7 +193,7 @@ class ReadWritePropertyConsoleCmd(ConsoleCmd):
         network_list = [int(arg) for arg in args[1:]]
 
         # pass along to the service access point
-        this_application.nsap.add_router_references(None, router_address, network_list)
+        this_application.nsap.update_router_references(None, router_address, network_list)
 
 
 #

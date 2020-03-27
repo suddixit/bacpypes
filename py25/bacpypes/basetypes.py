@@ -4,11 +4,12 @@
 Base Types
 """
 
-from .debugging import ModuleLogger
+from .debugging import bacpypes_debugging, ModuleLogger
+from .errors import MissingRequiredParameter
 
-from .primitivedata import BitString, Boolean, CharacterString, Date, Double, \
+from .primitivedata import Atomic, BitString, Boolean, CharacterString, Date, Double, \
     Enumerated, Integer, Null, ObjectIdentifier, OctetString, Real, Time, \
-    Unsigned
+    Unsigned, Unsigned16, Tag
 from .constructeddata import Any, AnyAtomic, ArrayOf, Choice, Element, \
     Sequence, SequenceOf
 
@@ -94,6 +95,7 @@ class ObjectTypesSupported(BitString):
         , 'accessUser':35
         , 'accessZone':36
         , 'credentialDataInput':37
+        , 'networkPort':56
         , 'networkSecurity':38
         , 'bitstringValue':39
         , 'characterstringValue':40
@@ -1101,9 +1103,50 @@ class ProgramState(Enumerated):
         }
 
 class PropertyIdentifier(Enumerated):
+    # TODO: Sort Alphabetically
     vendor_range = (512, 4194303)
     enumerations = \
         { 'absenteeLimit':244
+        , 'tags':486
+        , 'profileLocation':91
+        , 'eventDetectionEnabled':353
+        , 'apduLength':388
+        , 'linkSpeed':420
+        , 'linkSpeeds':421
+        , 'linkSpeedAutonegotiate':422
+        , 'networkInterfaceName':424
+        , 'bacnetIPMode':408
+        , 'ipAddress':400
+        , 'bacnetIPUDPPort':412
+        , 'ipSubnetMask':411
+        , 'ipDefaultGateway':401
+        , 'bacnetIPMulticastAddress':409
+        , 'ipDNSServer':406
+        , 'ipDHCPEnable':402
+        , 'ipDHCPLeaseTime':403
+        , 'ipDHCPLeaseTimeRemaining':404
+        , 'ipDHCPServer':405
+        , 'bacnetIPNATTraversal':410
+        , 'bacnetIPGlobalAddress':407
+        , 'bbmdBroadcastDistributionTable':414
+        , 'bbmdAcceptFDRegistrations':413
+        , 'bbmdForeignDeviceTable':415
+        , 'fdBBMDAddress':418
+        , 'fdSubscriptionLifetime':419
+        , 'bacnetIPv6Mode':435
+        , 'ipv6Address':436
+        , 'ipv6PrefixLength':437
+        , 'bacnetIPv6UDPPort':438
+        , 'ipv6DefaultGateway':439
+        , 'bacnetIPv6MulticastAddress':440
+        , 'ipv6DNSServer':441
+        , 'ipv6AutoAddressingEnabled':442
+        , 'ipv6DHCPLeaseTime':443
+        , 'ipv6DHCPLeaseTimeRemaining':444
+        , 'ipv6DHCPServer':445
+        , 'ipv6ZoneIndex':446
+        , 'virtualMACAddressTable':429
+        , 'routingTable':428
         , 'acceptedModes':175
         , 'accessAlarmEvents':245
         , 'accessDoors':246
@@ -1158,8 +1201,10 @@ class PropertyIdentifier(Enumerated):
         , 'bufferSize':126
         , 'changeOfStateCount':15
         , 'changeOfStateTime':16
+        , 'changesPending':416
         , 'channelNumber':366
         , 'clientCovIncrement':127
+        , 'command':417
         , 'configurationFiles':154
         , 'controlGroups':367
         , 'controlledVariableReference':19
@@ -1286,6 +1331,7 @@ class PropertyIdentifier(Enumerated):
         , 'loggingRecord':184
         , 'loggingType':197
         , 'lowLimit':59
+        , 'macAddress':423
         , 'maintenanceRequired':158
         , 'manipulatedVariableReference':60
         , 'manualSlaveAddressBinding':170
@@ -1317,6 +1363,9 @@ class PropertyIdentifier(Enumerated):
         , 'musterPoint':287
         , 'negativeAccessRules':288
         , 'networkAccessSecurityPolicies':332
+        , 'networkNumber':425
+        , 'networkNumberQuality':427
+        , 'networkType': 427
         , 'nodeSubtype':207
         , 'nodeType':208
         , 'notificationClass':17
@@ -1365,6 +1414,7 @@ class PropertyIdentifier(Enumerated):
         , 'propertyList':371
         , 'proportionalConstant':93
         , 'proportionalConstantUnits':94
+        , 'protocolLevel':482
         , 'protocolObjectTypesSupported':96
         , 'protocolRevision':139
         , 'protocolServicesSupported':97
@@ -1376,6 +1426,7 @@ class PropertyIdentifier(Enumerated):
         , 'recipientList':102
         , 'recordsSinceNotification':140
         , 'recordCount':141
+        , 'referencePort':483
         , 'reliability':103
         , 'reliabilityEvaluationInhibit':357
         , 'relinquishDefault':104
@@ -1566,9 +1617,188 @@ class WriteStatus(Enumerated):
         , 'failed':3
         }
 
+class NetworkType(Enumerated):
+    enumerations = \
+        { 'ethernet':0
+        , 'arcnet':1
+        , 'mstp':2
+        , 'ptp':3
+        , 'lontalk':4
+        , 'ipv4':5
+        , 'zigbee':6
+        , 'virtual': 7
+        # , 'non-bacnet': 8  Removed in Version 1, Revision 18
+        , 'ipv6':9
+        , 'serial':10
+        }
+
+class ProtocolLevel(Enumerated):
+    enumerations = \
+        { 'physical':0
+        , 'protocol':1
+        , 'bacnetApplication':2
+        , 'nonBacnetApplication':3
+        }
+
+class NetworkNumberQuality(Enumerated):
+    enumerations = \
+        { 'unknown':0
+        , 'learned':1
+        , 'learnedConfigured':2
+        , 'configured':3
+        }
+
+class NetworkPortCommand(Enumerated):
+    enumerations = \
+        { 'idle':0
+        , 'discardChanges':1
+        , 'renewFdDRegistration':2
+        , 'restartSlaveDiscovery':3
+        , 'renewDHCP':4
+        , 'restartAutonegotiation':5
+        , 'disconnect':6
+        , 'restartPort':7
+        }
+
+class IPMode(Enumerated):
+    enumerations = \
+        { 'normal':0
+        , 'foreign':1
+        , 'bbmd':2
+        }
+
+class RouterEntryStatus(Enumerated):
+    enumerations = \
+        { 'available':0
+        , 'busy':1
+        , 'disconnected':2
+        }
+
 #
 #   Forward Sequences
 #
+
+class HostAddress(Choice):
+    choiceElements = \
+        [ Element('none', Null)
+        , Element('ipAddress', OctetString)  # 4 octets for B/IP or 16 octets for B/IPv6
+        , Element('name', CharacterString)  # Internet host name (see RFC 1123)
+        ]
+
+class HostNPort(Sequence):
+    sequenceElements = \
+        [ Element('host', HostAddress)
+        , Element('port', Unsigned16)
+        ]
+
+class BDTEntry(Sequence):
+    sequenceElements = \
+        [ Element('bbmdAddress', HostNPort)
+        , Element('broadcastMask', OctetString)  # shall be present if BACnet/IP, and absent for BACnet/IPv6
+        ]
+
+class FDTEntry(Sequence):
+    sequenceElements = \
+        [ Element('bacnetIPAddress', OctetString)  # the 6-octet B/IP or 18-octet B/IPv6 address of the registrant
+        , Element('timeToLive', Unsigned16)  # time to live in seconds at the time of registration
+        , Element('remainingTimeToLive', Unsigned16)  # remaining time to live in seconds, incl. grace period
+        ]
+
+class VMACEntry(Sequence):
+    sequenceElements = \
+        [ Element('virtualMACAddress', OctetString)  # maximum size 6 octets
+        , Element('nativeMACAddress', OctetString)
+        ]
+
+class RouterEntry(Sequence):
+    sequenceElements = \
+        [ Element('networkNumber', Unsigned16)
+        , Element('macAddress', OctetString)
+        , Element('status', RouterEntryStatus)  # Defined Above
+        ]
+
+class NameValue(Sequence):
+    sequenceElements = \
+        [ Element('name', CharacterString)
+        , Element('value', AnyAtomic, None, True)
+        ]
+
+    def __init__(self, name=None, value=None):
+        if _debug: NameValue._debug("__init__ name=%r value=%r", name, value)
+
+        # default to no value
+        self.name = name
+        self.value = None
+
+        if value is None:
+            pass
+        elif isinstance(value, (Atomic, DateTime)):
+            self.value = value
+        elif isinstance(value, Tag):
+            self.value = value.app_to_object()
+        else:
+            raise TypeError("invalid constructor datatype")
+
+    def encode(self, taglist):
+        if _debug: NameValue._debug("(%r)encode %r", self.__class__.__name__, taglist)
+
+        # build a tag and encode the name into it
+        tag = Tag()
+        CharacterString(self.name).encode(tag)
+        taglist.append(tag.app_to_context(0))
+
+        # the value is optional
+        if self.value is not None:
+            if isinstance(self.value, DateTime):
+                # has its own encoder
+                self.value.encode(taglist)
+            else:
+                # atomic values encode into a tag
+                tag = Tag()
+                self.value.encode(tag)
+                taglist.append(tag)
+
+    def decode(self, taglist):
+        if _debug: NameValue._debug("(%r)decode %r", self.__class__.__name__, taglist)
+
+        # no contents yet
+        self.name = None
+        self.value = None
+
+        # look for the context encoded character string
+        tag = taglist.Peek()
+        if _debug: NameValue._debug("    - name tag: %r", tag)
+        if (tag is None) or (tag.tagClass != Tag.contextTagClass) or (tag.tagNumber != 0):
+            raise MissingRequiredParameter("%s is a missing required element of %s" % ('name', self.__class__.__name__))
+
+        # pop it off and save the value
+        taglist.Pop()
+        tag = tag.context_to_app(Tag.characterStringAppTag)
+        self.name = CharacterString(tag).value
+
+        # look for the optional application encoded value
+        tag = taglist.Peek()
+        if _debug: NameValue._debug("    - value tag: %r", tag)
+        if tag and (tag.tagClass == Tag.applicationTagClass):
+
+            # if it is a date check the next one for a time
+            if (tag.tagNumber == Tag.dateAppTag) and (len(taglist.tagList) >= 2):
+                next_tag = taglist.tagList[1]
+                if _debug: NameValue._debug("    - next_tag: %r", next_tag)
+
+                if (next_tag.tagClass == Tag.applicationTagClass) and (next_tag.tagNumber == Tag.timeAppTag):
+                    if _debug: NameValue._debug("    - remaining tag list 0: %r", taglist.tagList)
+
+                    self.value = DateTime()
+                    self.value.decode(taglist)
+                    if _debug: NameValue._debug("    - date time value: %r", self.value)
+
+            # just a primitive value
+            if self.value is None:
+                taglist.Pop()
+                self.value = tag.app_to_object()
+
+bacpypes_debugging(NameValue)
 
 class DeviceAddress(Sequence):
     sequenceElements = \
@@ -1730,7 +1960,8 @@ class AccessRule(Sequence):
         ]
 
 class AccessThreatLevel(Unsigned):
-    pass
+    _low_limit = 0
+    _high_limit = 100
 
 class AccumulatorRecord(Sequence):
     sequenceElements = \
@@ -2393,8 +2624,8 @@ class PropertyReference(Sequence):
 
 class Scale(Choice):
     choiceElements = \
-        [ Element('floatScale', Real)
-        , Element('integerScale', Integer)
+        [ Element('floatScale', Real, 0)
+        , Element('integerScale', Integer, 1)
         ]
 
 class SecurityKeySet(Sequence):

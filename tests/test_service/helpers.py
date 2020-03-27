@@ -8,6 +8,7 @@ from bacpypes.debugging import bacpypes_debugging, ModuleLogger
 from bacpypes.capability import Capability
 
 from bacpypes.comm import Client, bind
+from bacpypes.iocb import IOCB
 from bacpypes.pdu import Address, LocalBroadcast
 from bacpypes.npdu import NPDU
 from bacpypes.apdu import apdu_types, APDU, SimpleAckPDU, RejectPDU, AbortPDU
@@ -26,6 +27,16 @@ from ..time_machine import reset_time_machine, run_time_machine
 # some debugging
 _debug = 0
 _log = ModuleLogger(globals())
+
+
+class _NetworkServiceElement(NetworkServiceElement):
+
+    """
+    This class turns off the deferred startup function call that broadcasts
+    I-Am-Router-To-Network and Network-Number-Is messages.
+    """
+
+    _startup_disabled = True
 
 
 #
@@ -249,7 +260,7 @@ class ApplicationStateMachine(ApplicationIOController, StateMachine):
         if _debug: ApplicationStateMachine._debug("    - address: %r", self.address)
 
         # continue with initialization
-        ApplicationIOController.__init__(self, localDevice, self.address)
+        ApplicationIOController.__init__(self, localDevice)
         StateMachine.__init__(self, name=localDevice.objectName)
 
         # include a application decoder
@@ -267,7 +278,7 @@ class ApplicationStateMachine(ApplicationIOController, StateMachine):
         self.nsap = NetworkServiceAccessPoint()
 
         # give the NSAP a generic network layer service element
-        self.nse = NetworkServiceElement()
+        self.nse = _NetworkServiceElement()
         bind(self.nse, self.nsap)
 
         # bind the top layers
@@ -282,8 +293,9 @@ class ApplicationStateMachine(ApplicationIOController, StateMachine):
     def send(self, apdu):
         if _debug: ApplicationStateMachine._debug("send(%s) %r", self.name, apdu)
 
-        # send the apdu down the stack
-        self.request(apdu)
+        # build an IOCB to wrap the request
+        iocb = IOCB(apdu)
+        self.request_io(iocb)
 
     def indication(self, apdu):
         if _debug: ApplicationStateMachine._debug("indication(%s) %r", self.name, apdu)

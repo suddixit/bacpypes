@@ -12,7 +12,7 @@ import unittest
 from bacpypes.debugging import bacpypes_debugging, ModuleLogger, xtob
 
 from bacpypes.errors import InvalidTag
-from bacpypes.primitivedata import Unsigned, Tag
+from bacpypes.primitivedata import Unsigned, Unsigned8, Unsigned16, Tag
 
 # some debugging
 _debug = 0
@@ -80,6 +80,7 @@ class TestUnsigned(unittest.TestCase):
         assert obj.value == 0
 
         assert Unsigned.is_valid(1)
+        assert Unsigned.is_valid('1')
         assert not Unsigned.is_valid(-1)
         if sys.version[0] == 2:
             assert Unsigned.is_valid(long(1))
@@ -103,6 +104,22 @@ class TestUnsigned(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             Unsigned(-1)
+
+    def test_unsigned8(self):
+        if _debug: TestUnsigned._debug("test_unsigned8")
+
+        with self.assertRaises(ValueError):
+            Unsigned8(-1)
+        with self.assertRaises(ValueError):
+            Unsigned8(256)
+
+    def test_unsigned16(self):
+        if _debug: TestUnsigned._debug("test_unsigned16")
+
+        with self.assertRaises(ValueError):
+            Unsigned16(-1)
+        with self.assertRaises(ValueError):
+            Unsigned16(65536)
 
     def test_unsigned_tag(self):
         if _debug: TestUnsigned._debug("test_unsigned_tag")

@@ -76,7 +76,7 @@ def encode_max_segments_accepted(arg):
         if _max_segments_accepted_encoding[i] <= arg:
             return i
 
-    raise ValueError("invalid max max segments accepted: {0}".format(arg))
+    raise ValueError("invalid max max segments accepted: %r" % (arg,))
 
 def decode_max_segments_accepted(arg):
     """Decode the maximum number of segments the device will accept, Section
@@ -97,12 +97,12 @@ def encode_max_apdu_length_accepted(arg):
         if (arg >= _max_apdu_length_encoding[i]):
             return i
 
-    raise ValueError("invalid max APDU length accepted: {0}".format(arg))
+    raise ValueError("invalid max APDU length accepted: %r" % (arg,))
 
 def decode_max_apdu_length_accepted(arg):
     v = _max_apdu_length_encoding[arg]
     if not v:
-        raise ValueError("invalid max APDU length accepted: {0}".format(arg))
+        raise ValueError("invalid max APDU length accepted: %r" % (arg,))
 
     return v
 
@@ -927,7 +927,7 @@ class RangeByPosition(Sequence):
 
 class RangeBySequenceNumber(Sequence):
     sequenceElements = \
-        [ Element('referenceIndex', Unsigned)
+        [ Element('referenceSequenceNumber', Unsigned)
         , Element('count', Integer)
         ]
 
@@ -1581,11 +1581,12 @@ class ReinitializeDeviceRequestReinitializedStateOfDevice(Enumerated):
     enumerations = \
         { 'coldstart':0
         , 'warmstart':1
-        , 'startbackup':2
-        , 'endbackup':3
-        , 'startrestore':4
-        , 'endrestore':5
-        , 'abortrestore':6
+        , 'startBackup':2
+        , 'endBackup':3
+        , 'startRestore':4
+        , 'endRestore':5
+        , 'abortRestore':6
+        , 'activateChanges':7
         }
 
 class ReinitializeDeviceRequest(ConfirmedRequestSequence):

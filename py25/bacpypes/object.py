@@ -14,7 +14,7 @@ from .debugging import function_debugging, ModuleLogger, Logging
 
 from .primitivedata import Atomic, BitString, Boolean, CharacterString, Date, \
     Double, Integer, ObjectIdentifier, ObjectType, OctetString, Real, Time, \
-    Unsigned
+    Unsigned, Unsigned8, Unsigned16
 from .constructeddata import AnyAtomic, Array, ArrayOf, List, ListOf, \
     Choice, Element, Sequence
 from .basetypes import AccessCredentialDisable, AccessCredentialDisableReason, \
@@ -22,24 +22,26 @@ from .basetypes import AccessCredentialDisable, AccessCredentialDisableReason, \
     AccessUserType, AccessZoneOccupancyState, AccumulatorRecord, Action, \
     ActionList, AddressBinding, AssignedAccessRights, AuthenticationFactor, \
     AuthenticationFactorFormat, AuthenticationPolicy, AuthenticationStatus, \
-    AuthorizationException, AuthorizationMode, BackupState, BinaryPV, \
+    AuthorizationException, AuthorizationMode, BackupState, BDTEntry, BinaryPV, \
     COVSubscription, CalendarEntry, ChannelValue, ClientCOV, \
     CredentialAuthenticationFactor, DailySchedule, DateRange, DateTime, \
     Destination, DeviceObjectPropertyReference, DeviceObjectReference, \
     DeviceStatus, DoorAlarmState, DoorSecuredStatus, DoorStatus, DoorValue, \
     EngineeringUnits, EventNotificationSubscription, EventParameter, \
     EventState, EventTransitionBits, EventType, FaultParameter, FaultType, \
-    FileAccessMethod, LifeSafetyMode, LifeSafetyOperation, LifeSafetyState, \
+    FileAccessMethod, FDTEntry, IPMode, HostNPort, LifeSafetyMode, LifeSafetyOperation, LifeSafetyState, \
     LightingCommand, LightingInProgress, LightingTransition, LimitEnable, \
     LockStatus, LogMultipleRecord, LogRecord, LogStatus, LoggingType, \
-    Maintenance, NetworkSecurityPolicy, NodeType, NotifyType, \
+    Maintenance, NameValue, NetworkNumberQuality, NetworkPortCommand, \
+    NetworkSecurityPolicy, NetworkType, NodeType, NotifyType, \
     ObjectPropertyReference, ObjectTypesSupported, OptionalCharacterString, \
     Polarity, PortPermission, Prescale, PriorityArray, ProcessIdSelection, \
     ProgramError, ProgramRequest, ProgramState, PropertyAccessResult, \
-    PropertyIdentifier, Recipient, Reliability, RestartReason, Scale, \
-    SecurityKeySet, SecurityLevel, Segmentation, ServicesSupported, \
-    SetpointReference, ShedLevel, ShedState, SilencedState, SpecialEvent, \
-    StatusFlags, TimeStamp, VTClass, VTSession, WriteStatus
+    PropertyIdentifier, ProtocolLevel, Recipient, Reliability, RestartReason, \
+    RouterEntry, Scale, SecurityKeySet, SecurityLevel, Segmentation, \
+    ServicesSupported, SetpointReference, ShedLevel, ShedState, SilencedState, \
+    SpecialEvent, StatusFlags, TimeStamp, VTClass, VTSession, VMACEntry, \
+    WriteStatus
 from .apdu import EventNotificationParameters, ReadAccessSpecification, \
     ReadAccessResult
 
@@ -328,6 +330,8 @@ class Property(Logging):
                 arry[arrayIndex] = value
             except IndexError:
                 raise ExecutionError(errorClass='property', errorCode='invalidArrayIndex')
+            except TypeError:
+                raise ExecutionError(errorClass='property', errorCode='valueOutOfRange')
 
             # check for monitors, call each one with the old and new value
             if is_monitored:
@@ -377,7 +381,7 @@ class StandardProperty(Property, Logging):
 
 class OptionalProperty(StandardProperty, Logging):
 
-    """The property is required to be present and readable using BACnet services."""
+    """The property is optional and need not be present."""
 
     def __init__(self, identifier, datatype, default=None, optional=True, mutable=False):
         if _debug:
@@ -451,6 +455,7 @@ class ObjectIdentifierProperty(ReadableProperty, Logging):
 class Object(Logging):
 
     _debug_contents = ('_app',)
+    _object_supports_cov = False
 
     properties = \
         [ ObjectIdentifierProperty('objectIdentifier', ObjectIdentifier, optional=False)
@@ -458,6 +463,9 @@ class Object(Logging):
         , OptionalProperty('description', CharacterString)
         , OptionalProperty('profileName', CharacterString)
         , ReadableProperty('propertyList', ArrayOf(PropertyIdentifier))
+        , OptionalProperty('tags', ArrayOf(NameValue))
+        , OptionalProperty('profileLocation', CharacterString)
+        , OptionalProperty('profileName', CharacterString)
         ]
     _properties = {}
 
@@ -721,6 +729,8 @@ register_object_type(AccessCredentialObject)
 
 class AccessDoorObject(Object):
     objectType = 'accessDoor'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', DoorValue)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -759,6 +769,8 @@ register_object_type(AccessDoorObject)
 
 class AccessPointObject(Object):
     objectType = 'accessPoint'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('statusFlags', StatusFlags)
         , ReadableProperty('eventState', EventState)
@@ -944,6 +956,8 @@ register_object_type(AlertEnrollmentObject)
 
 class AnalogInputObject(Object):
     objectType = 'analogInput'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Real)
         , OptionalProperty('deviceType', CharacterString)
@@ -980,6 +994,8 @@ register_object_type(AnalogInputObject)
 
 class AnalogOutputObject(Object):
     objectType = 'analogOutput'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', Real)
         , OptionalProperty('deviceType', CharacterString)
@@ -1017,6 +1033,8 @@ register_object_type(AnalogOutputObject)
 
 class AnalogValueObject(Object):
     objectType = 'analogValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Real)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1071,6 +1089,8 @@ register_object_type(AveragingObject)
 
 class BinaryInputObject(Object):
     objectType = 'binaryInput'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', BinaryPV)
         , OptionalProperty('deviceType', CharacterString)
@@ -1106,6 +1126,8 @@ register_object_type(BinaryInputObject)
 
 class BinaryOutputObject(Object):
     objectType = 'binaryOutput'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', BinaryPV)
         , OptionalProperty('deviceType', CharacterString)
@@ -1145,6 +1167,8 @@ register_object_type(BinaryOutputObject)
 
 class BinaryValueObject(Object):
     objectType = 'binaryValue'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', BinaryPV)
         , ReadableProperty('statusFlags',StatusFlags)
@@ -1249,6 +1273,8 @@ register_object_type(ChannelObject)
 
 class CharacterStringValueObject(Object):
     objectType = 'characterstringValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', CharacterString)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1290,6 +1316,8 @@ register_object_type(CommandObject)
 
 class CredentialDataInputObject(Object):
     objectType = 'credentialDataInput'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', AuthenticationFactor)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1313,6 +1341,8 @@ register_object_type(CredentialDataInputObject)
 
 class DatePatternValueObject(Object):
     objectType = 'datePatternValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Date)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1327,6 +1357,8 @@ register_object_type(DatePatternValueObject)
 
 class DateValueObject(Object):
     objectType = 'dateValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Date)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1341,6 +1373,8 @@ register_object_type(DateValueObject)
 
 class DateTimePatternValueObject(Object):
     objectType = 'datetimePatternValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', DateTime)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1356,6 +1390,8 @@ register_object_type(DateTimePatternValueObject)
 
 class DateTimeValueObject(Object):
     objectType = 'datetimeValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', DateTime)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1562,6 +1598,8 @@ register_object_type(GroupObject)
 
 class IntegerValueObject(Object):
     objectType = 'integerValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Integer)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1598,6 +1636,8 @@ register_object_type(IntegerValueObject)
 
 class LargeAnalogValueObject(Object):
     objectType = 'largeAnalogValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Double)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1634,6 +1674,8 @@ register_object_type(LargeAnalogValueObject)
 
 class LifeSafetyPointObject(Object):
     objectType = 'lifeSafetyPoint'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', LifeSafetyState)
         , ReadableProperty('trackingValue', LifeSafetyState)
@@ -1673,6 +1715,8 @@ register_object_type(LifeSafetyPointObject)
 
 class LifeSafetyZoneObject(Object):
     objectType = 'lifeSafetyZone'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', LifeSafetyState)
         , ReadableProperty('trackingValue', LifeSafetyState)
@@ -1710,6 +1754,8 @@ register_object_type(LifeSafetyZoneObject)
 
 class LightingOutputObject(Object):
     objectType = 'lightingOutput'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', Real)
         , ReadableProperty('trackingValue', Real)
@@ -1741,6 +1787,8 @@ register_object_type(LightingOutputObject)
 
 class LoadControlObject(Object):
     objectType = 'loadControl'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', ShedState)
         , OptionalProperty('stateDescription', CharacterString)
@@ -1776,6 +1824,8 @@ register_object_type(LoadControlObject)
 
 class LoopObject(Object):
     objectType = 'loop'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Real)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1823,6 +1873,8 @@ register_object_type(LoopObject)
 
 class MultiStateInputObject(Object):
     objectType = 'multiStateInput'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Unsigned)
         , OptionalProperty('deviceType', CharacterString)
@@ -1853,6 +1905,8 @@ register_object_type(MultiStateInputObject)
 
 class MultiStateOutputObject(Object):
     objectType = 'multiStateOutput'
+    _object_supports_cov = True
+
     properties = \
         [ WritableProperty('presentValue', Unsigned)
         , OptionalProperty('deviceType', CharacterString)
@@ -1884,6 +1938,8 @@ register_object_type(MultiStateOutputObject)
 
 class MultiStateValueObject(Object):
     objectType = 'multiStateValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Unsigned)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1912,6 +1968,82 @@ class MultiStateValueObject(Object):
         ]
 
 register_object_type(MultiStateValueObject)
+
+class NetworkPortObject(Object):
+    objectType = 'networkPort'  #56
+    properties = \
+        [ ReadableProperty('statusFlags', StatusFlags)  #111
+        , ReadableProperty('reliability', Reliability)  #103
+        , ReadableProperty('outOfService', Boolean)  #81
+        , ReadableProperty('networkType', NetworkType)  #427
+        , ReadableProperty('protocolLevel', ProtocolLevel)  #482
+        , OptionalProperty('referencePort', Unsigned)  #483
+        , ReadableProperty('networkNumber', Unsigned16)  #425
+        , ReadableProperty('networkNumberQuality', NetworkNumberQuality)  #427
+        , ReadableProperty('changesPending', Boolean)  #416
+        , OptionalProperty('command', NetworkPortCommand)   #417
+        , OptionalProperty('macAddress', OctetString)   #423
+        , ReadableProperty('apduLength', Unsigned)  #388
+        , ReadableProperty('linkSpeed', Real)  #420
+        , OptionalProperty('linkSpeeds', ArrayOf(Real))  #421
+        , OptionalProperty('eventTimeStamps', ArrayOf(TimeStamp))  #130
+        , OptionalProperty('linkSpeedAutonegotiate', Boolean)  #422
+        , OptionalProperty('networkInterfaceName', CharacterString)  #424
+        , OptionalProperty('bacnetIPMode', IPMode)  #408
+        , OptionalProperty('ipAddress', OctetString)  #400
+        , OptionalProperty('bacnetIPUDPPort', Unsigned16)  #412
+        , OptionalProperty('ipSubnetMask', OctetString)  #411
+        , OptionalProperty('ipDefaultGateway', OctetString)  #401
+        , OptionalProperty('bacnetIPMulticastAddress', OctetString)  #409
+        , OptionalProperty('ipDNSServer', ArrayOf(OctetString))  #406
+        , OptionalProperty('ipDHCPEnable', Boolean)  #402
+        , OptionalProperty('ipDHCPLeaseTime', Unsigned)  #403
+        , OptionalProperty('ipDHCPLeaseTimeRemaining', Unsigned)  #404
+        , OptionalProperty('ipDHCPServer', OctetString)  #405
+        , OptionalProperty('bacnetIPNATTraversal', Boolean)  #410
+        , OptionalProperty('bacnetIPGlobalAddress', HostNPort)  #407
+        , OptionalProperty('bbmdBroadcastDistributionTable', ListOf(BDTEntry))  #414
+        , OptionalProperty('bbmdAcceptFDRegistrations', Boolean)  #413
+        , OptionalProperty('bbmdForeignDeviceTable', ListOf(FDTEntry))  #415
+        , OptionalProperty('fdBBMDAddress', HostNPort)  #418
+        , OptionalProperty('fdSubscriptionLifetime', Unsigned16)  #419
+        , OptionalProperty('bacnetIPv6Mode', IPMode)  #435
+        , OptionalProperty('ipv6Address', OctetString)  #436
+        , OptionalProperty('ipv6PrefixLength', Unsigned8)  #437
+        , OptionalProperty('bacnetIPv6UDPPort', Unsigned16)  #438
+        , OptionalProperty('ipv6DefaultGateway', OctetString)  #439
+        , OptionalProperty('bacnetIPv6MulticastAddress', OctetString)  #440
+        , OptionalProperty('ipv6DNSServer', OctetString)  #441
+        , OptionalProperty('ipv6AutoAddressingEnabled', Boolean)  #442
+        , OptionalProperty('ipv6DHCPLeaseTime', Unsigned)  #443
+        , OptionalProperty('ipv6DHCPLeaseTimeRemaining', Unsigned)  #444
+        , OptionalProperty('ipv6DHCPServer', OctetString)  #445
+        , OptionalProperty('ipv6ZoneIndex', CharacterString)  #446
+        , OptionalProperty('maxMaster', Unsigned8)  #64
+        , OptionalProperty('maxInfoFrames', Unsigned8)  #63
+        , OptionalProperty('slaveProxyEnable', Boolean)  #172
+        , OptionalProperty('manualSlaveAddressBinding', ListOf(AddressBinding))  #170
+        , OptionalProperty('autoSlaveDiscovery', Boolean)  #169
+        , OptionalProperty('slaveAddressBinding', ListOf(AddressBinding))  #171
+        , OptionalProperty('virtualMACAddressTable', ListOf(VMACEntry))  #429
+        , OptionalProperty('routingTable', ListOf(RouterEntry))  #428
+        , OptionalProperty('eventDetectionEnabled', Boolean)  #353
+        , OptionalProperty('notificationClass', Unsigned)  #17
+        , OptionalProperty('eventEnable', EventTransitionBits)  #35
+        , OptionalProperty('ackedTransitions', EventTransitionBits)  #0
+        , OptionalProperty('notifyType', NotifyType)  #72
+        , OptionalProperty('eventTimeStamps', ArrayOf(TimeStamp, 3))  #130
+        , OptionalProperty('eventMessageTexts', ArrayOf(CharacterString, 3))  #351
+        , OptionalProperty('eventMessageTextsConfig', ArrayOf(CharacterString, 3))  #352
+        , OptionalProperty('eventState', EventState)  #36
+        , ReadableProperty('reliabilityEvaluationInhibit', Boolean) #357
+        , OptionalProperty('propertyList', ArrayOf(PropertyIdentifier)) #371
+        , OptionalProperty('tags', ArrayOf(NameValue))  #486
+        , OptionalProperty('profileLocation', CharacterString)  #91
+        , OptionalProperty('profileName', CharacterString)  #168
+        ]
+
+register_object_type(NetworkPortObject)
 
 class NetworkSecurityObject(Object):
     objectType = 'networkSecurity'
@@ -1960,6 +2092,8 @@ register_object_type(NotificationForwarderObject)
 
 class OctetStringValueObject(Object):
     objectType = 'octetstringValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', CharacterString)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -1974,6 +2108,8 @@ register_object_type(OctetStringValueObject)
 
 class PositiveIntegerValueObject(Object):
     objectType = 'positiveIntegerValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Unsigned)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -2035,6 +2171,8 @@ register_object_type(ProgramObject)
 
 class PulseConverterObject(Object):
     objectType = 'pulseConverter'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Real)
         , OptionalProperty('inputReference', ObjectPropertyReference)
@@ -2112,6 +2250,8 @@ register_object_type(StructuredViewObject)
 
 class TimePatternValueObject(Object):
     objectType = 'timePatternValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Time)
         , ReadableProperty('statusFlags', StatusFlags)
@@ -2126,6 +2266,8 @@ register_object_type(TimePatternValueObject)
 
 class TimeValueObject(Object):
     objectType = 'timeValue'
+    _object_supports_cov = True
+
     properties = \
         [ ReadableProperty('presentValue', Time)
         , ReadableProperty('statusFlags', StatusFlags)

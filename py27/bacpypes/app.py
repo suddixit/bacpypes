@@ -7,6 +7,8 @@ Application Module
 import warnings
 
 from .debugging import bacpypes_debugging, DebugContents, ModuleLogger
+
+from .core import deferred
 from .comm import ApplicationServiceElement, bind
 from .iocb import IOController, SieveQueue
 
@@ -209,6 +211,8 @@ class DeviceInfoCache:
 @bacpypes_debugging
 class Application(ApplicationServiceElement, Collector):
 
+    _startup_disabled = False
+
     def __init__(self, localDevice=None, localAddress=None, deviceInfoCache=None, aseID=None):
         if _debug: Application._debug("__init__ %r %r deviceInfoCache=%r aseID=%r", localDevice, localAddress, deviceInfoCache, aseID)
         ApplicationServiceElement.__init__(self, aseID)
@@ -249,6 +253,12 @@ class Application(ApplicationServiceElement, Collector):
 
         # now set up the rest of the capabilities
         Collector.__init__(self)
+
+        # if starting up is enabled, find all the startup functions
+        if not self._startup_disabled:
+            for fn in self.capability_functions('startup'):
+                if _debug: Application._debug("    - startup fn: %r" , fn)
+                deferred(fn, self)
 
     def add_object(self, obj):
         """Add an object to the local collection."""
@@ -417,7 +427,7 @@ class ApplicationIOController(IOController, Application):
         # look up the queue
         queue = self.queue_by_address.get(destination_address, None)
         if not queue:
-            queue = SieveQueue(self.request, destination_address)
+            queue = SieveQueue(self._app_request, destination_address)
             self.queue_by_address[destination_address] = queue
         if _debug: ApplicationIOController._debug("    - queue: %r", queue)
 
@@ -453,15 +463,26 @@ class ApplicationIOController(IOController, Application):
             if _debug: ApplicationIOController._debug("    - queue is empty")
             del self.queue_by_address[address]
 
-    def request(self, apdu):
-        if _debug: ApplicationIOController._debug("request %r", apdu)
+    def _app_request(self, apdu):
+        if _debug: ApplicationIOController._debug("_app_request %r", apdu)
 
-        # send it downstream
+        # send it downstream, bypass the guard
         super(ApplicationIOController, self).request(apdu)
 
         # if this was an unconfirmed request, it's complete, no message
         if isinstance(apdu, UnconfirmedRequestPDU):
             self._app_complete(apdu.pduDestination, None)
+
+    def request(self, apdu):
+        if _debug: ApplicationIOController._debug("request %r", apdu)
+
+        # if this is not unconfirmed request, tell the application to use
+        # the IOCB interface
+        if not isinstance(apdu, UnconfirmedRequestPDU):
+            raise RuntimeError("use IOCB for confirmed requests")
+
+        # send it downstream
+        super(ApplicationIOController, self).request(apdu)
 
     def confirmation(self, apdu):
         if _debug: ApplicationIOController._debug("confirmation %r", apdu)
@@ -593,7 +614,7 @@ class BIPForeignApplication(ApplicationIOController, WhoIsIAmServices, ReadWrite
 @bacpypes_debugging
 class BIPNetworkApplication(NetworkServiceElement):
 
-    def __init__(self, localAddress, eID=None):
+    def __init__(self, localAddress, bbmdAddress=None, bbmdTTL=None, eID=None):
         if _debug: BIPNetworkApplication._debug("__init__ %r eID=%r", localAddress, eID)
         NetworkServiceElement.__init__(self, eID)
 
@@ -611,9 +632,12 @@ class BIPNetworkApplication(NetworkServiceElement):
 
         # create a generic BIP stack, bound to the Annex J server
         # on the UDP multiplexer
-        self.bip = BIPSimple()
+        if (not bbmdAddress) and (not bbmdTTL):
+            self.bip = BIPSimple()
+        else:
+            self.bip = BIPForeign(bbmdAddress, bbmdTTL)
         self.annexj = AnnexJCodec()
-        self.mux = UDPMultiplexer(self.localAddress)
+        self.mux = UDPMultiplexer(self.localAddress, noBroadcast=False)
 
         # bind the bottom layers
         bind(self.bip, self.annexj, self.mux.annexJ)
